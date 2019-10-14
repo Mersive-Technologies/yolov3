@@ -21,6 +21,7 @@
 storage.googleapis.com
 runs/*
 data/*
+coco/
 !data/samples/zidane.jpg
 !data/samples/bus.jpg
 !data/coco.names
@@ -41,9 +42,6 @@ gcp_test*.sh
 !targets*.mat
 
 # Neural Network weights -----------------------------------------------------------------------------------------------
-*.weights
-*.pt
-*.onnx
 *.mlmodel
 darknet53.conv.74
 yolov3-tiny.conv.15
