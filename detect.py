@@ -4,7 +4,10 @@ from sys import platform
 from models import *  # set ONNX_EXPORT in models.py
 from utils.datasets import *
 from utils.utils import *
+import re
 
+file = open("yolov3-tiny-anchors-results.csv", 'w')
+file.write("time,90,80,70,60,50,40,30,20,10\n")
 
 def detect(save_txt=False, save_img=False):
     img_size = (320, 192) if ONNX_EXPORT else opt.img_size  # (320, 192) or (416, 256) or (608, 352) for (height, width)
@@ -59,9 +62,16 @@ def detect(save_txt=False, save_img=False):
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
 
     # Run inference
+    timeStr = None
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
         t = time.time()
+
+        match = re.match(".*T([^\\.]*)", path)
+        if match is not None:
+            groups = match.groups()
+            if len(groups) > 0:
+                timeStr = groups[0].replace("-", ":")
 
         # Get detections
         img = torch.from_numpy(img).to(device)
@@ -80,6 +90,7 @@ def detect(save_txt=False, save_img=False):
 
             save_path = str(Path(out) / Path(p).name)
             s += '%gx%g ' % img.shape[2:]  # print string
+            people = {}
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -91,14 +102,20 @@ def detect(save_txt=False, save_img=False):
 
                 # Write results
                 for *xyxy, conf, _, cls in det:
-                    if save_txt:  # Write to file
-                        with open(save_path + '.txt', 'a') as file:
-                            file.write(('%g ' * 6 + '\n') % (*xyxy, cls, conf))
-
                     if save_img or view_img:  # Add bbox to image
-                        label = '%s %.2f' % (classes[int(cls)], conf)
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
+                        type = classes[int(cls)]
+                        label = '%s %.2f' % (type, conf)
+                        if type == "person":
+                            for threshold in range(90, 0, -10):
+                                if conf.item() * 100 > threshold:
+                                    people[str(threshold)] = people.get(str(threshold), 0) + 1
+                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
 
+            line = f"{timeStr},"
+            for threshold in range(90, 0, -10):
+                line += f"{people.get(str(threshold), 0)},"
+            file.write(f"{line}\n")
+            file.flush()
             print('%sDone. (%.3fs)' % (s, time.time() - t))
 
             # Stream results
@@ -137,7 +154,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=str, default='data/samples', help='source')  # input file/folder, 0 for webcam
     parser.add_argument('--output', type=str, default='output', help='output folder')  # output folder
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.3, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.1, help='object confidence threshold')
     parser.add_argument('--nms-thres', type=float, default=0.5, help='iou threshold for non-maximum suppression')
     parser.add_argument('--fourcc', type=str, default='mp4v', help='output video codec (verify ffmpeg support)')
     parser.add_argument('--half', action='store_true', help='half precision FP16 inference')
@@ -148,3 +165,4 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         detect()
+    file.close()
