@@ -3,11 +3,20 @@ numpy
 opencv-python
 torch >= 1.2
 matplotlib
+Cython
 pycocotools
 tqdm
 tb-nightly
 future
 Pillow
+onnx
+onnxruntime
+pytorch2keras
+onnx-tf
+tensorflow==1.14.0
+fastai
+scipy==1.3.3
+torchsummary
 
 # Equivalent conda commands ----------------------------------------------------
 # conda update -n base -c defaults conda

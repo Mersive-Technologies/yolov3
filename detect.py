@@ -1,16 +1,21 @@
 import argparse
 from sys import platform
+from pytorch2keras.converter import pytorch_to_keras
+from torch.autograd import Variable
 
 from models import *  # set ONNX_EXPORT in models.py
 from utils.datasets import *
 from utils.utils import *
 import re
+from torchsummary import summary
 
 file = open("yolov3-tiny-anchors-results.csv", 'w')
 file.write("time,90,80,70,60,50,40,30,20,10\n")
 
 def detect(save_txt=False, save_img=False):
-    img_size = (320, 192) if ONNX_EXPORT else opt.img_size  # (320, 192) or (416, 256) or (608, 352) for (height, width)
+    # (320, 192) or (416, 256) or (608, 352) for (height, width)
+    # img_size = (320, 192) if ONNX_EXPORT else opt.img_size
+    img_size = (352, 608)
     out, source, weights, half, view_img = opt.output, opt.source, opt.weights, opt.half, opt.view_img
     webcam = source == '0' or source.startswith('rtsp') or source.startswith('http') or source.endswith('.txt')
 
@@ -39,7 +44,11 @@ def detect(save_txt=False, save_img=False):
     # Export mode
     if ONNX_EXPORT:
         img = torch.zeros((1, 3) + img_size)  # (1, 3, 320, 192)
-        torch.onnx.export(model, img, 'weights/export.onnx', verbose=True)
+        # input_var = Variable(torch.FloatTensor(torch.zeros((1, 3) + img_size)))
+        # k_model = pytorch_to_keras(model, input_var, [(3, 320, 192)], verbose=True)
+
+        # summary(model, (3, 320, 192))
+        torch.onnx.export(model, img, 'weights/export.onnx', verbose=True, opset_version=11)
         return
 
     # Half precision
