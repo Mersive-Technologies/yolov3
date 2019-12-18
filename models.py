@@ -155,15 +155,18 @@ class YOLOLayer(nn.Module):
         self.oi = [0, 1, 2, 3] + list(range(5, self.no))  # output indices
         self.arc = arc
 
-        if ONNX_EXPORT:  # grids must be computed in __init__
-            stride = [32, 16, 8][yolo_index]  # stride of this layer
-            nx = int(img_size[1] / stride)  # number x grid points
-            ny = int(img_size[0] / stride)  # number y grid points
-            create_grids(self, img_size, (nx, ny))
+        # if ONNX_EXPORT:  # grids must be computed in __init__
+            # stride = [32, 16, 8][yolo_index]  # stride of this layer
+            # nx = int(img_size[1] / stride)  # number x grid points
+            # ny = int(img_size[0] / stride)  # number y grid points
+            # create_grids(self, img_size, (nx, ny))
 
     def forward(self, p, img_size, var=None):
         if ONNX_EXPORT:
             bs = 1  # batch size
+            ny, nx = p.shape[-2], p.shape[-1]
+            if (self.nx, self.ny) != (nx, ny):
+                create_grids(self, img_size, (nx, ny), p.device, p.dtype)
         else:
             bs, _, ny, nx = p.shape  # bs, 255, 13, 13
             if (self.nx, self.ny) != (nx, ny):
@@ -175,19 +178,19 @@ class YOLOLayer(nn.Module):
         if self.training:
             return p
 
-        elif ONNX_EXPORT:
-            # Constants CAN NOT BE BROADCAST, ensure correct shape!
-            m = self.na * self.nx * self.ny
-            ngu = self.ng.repeat((1, m, 1))
-            grid_xy = self.grid_xy.repeat((1, self.na, 1, 1, 1)).view(1, m, 2)
-            anchor_wh = self.anchor_wh.repeat((1, 1, self.nx, self.ny, 1)).view(1, m, 2) / ngu
-
-            p = p.view(m, self.no)
-            xy = torch.sigmoid(p[..., 0:2]) + grid_xy[0]  # x, y
-            wh = torch.exp(p[..., 2:4]) * anchor_wh[0]  # width, height
-            p_conf = torch.sigmoid(p[:, 4:5])  # Conf
-            p_cls = F.softmax(p[:, 5:self.no], 1) * p_conf  # SSD-like conf
-            return torch.cat((xy / ngu[0], wh, p_conf, p_cls), 1).t()
+        # elif ONNX_EXPORT:
+        #     # Constants CAN NOT BE BROADCAST, ensure correct shape!
+        #     m = self.na * self.nx * self.ny
+        #     ngu = self.ng.repeat((1, m, 1))
+        #     grid_xy = self.grid_xy.repeat((1, self.na, 1, 1, 1)).view(1, m, 2)
+        #     anchor_wh = self.anchor_wh.repeat((1, 1, self.nx, self.ny, 1)).view(1, m, 2) / ngu
+        #
+        #     p = p.view(m, self.no)
+        #     xy = torch.sigmoid(p[..., 0:2]) + grid_xy[0]  # x, y
+        #     wh = torch.exp(p[..., 2:4]) * anchor_wh[0]  # width, height
+        #     p_conf = torch.sigmoid(p[:, 4:5])  # Conf
+        #     p_cls = F.softmax(p[:, 5:self.no], 1) * p_conf  # SSD-like conf
+        #     return torch.cat((xy / ngu[0], wh, p_conf, p_cls), 1).t()
 
             # p = p.view(1, m, self.no)
             # xy = torch.sigmoid(p[..., 0:2]) + grid_xy  # x, y
@@ -271,10 +274,10 @@ class Darknet(nn.Module):
 
         if self.training:
             return output
-        elif ONNX_EXPORT:
-            output = torch.cat(output, 1)  # cat 3 layers 85 x (507, 2028, 8112) to 85 x 10647
-            nc = self.module_list[self.yolo_layers[0]].nc  # number of classes
-            return output[5:5 + nc].t(), output[0:4].t()  # ONNX scores, boxes
+        # elif ONNX_EXPORT:
+        #     output = torch.cat(output, 1)  # cat 3 layers 85 x (507, 2028, 8112) to 85 x 10647
+        #     nc = self.module_list[self.yolo_layers[0]].nc  # number of classes
+        #     return output[5:5 + nc].t(), output[0:4].t()  # ONNX scores, boxes
         else:
             io, p = list(zip(*output))  # inference output, training output
             return torch.cat(io, 1), p
