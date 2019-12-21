@@ -1,0 +1,1 @@
+python3 train.py --data data/voc.data --cfg cfg/yolov3-tiny-anchors.cfg --weights weights/yolov3-tiny-ultralytics-pretrained.pt --transfer --rect --device 0
