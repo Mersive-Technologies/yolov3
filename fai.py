@@ -2,6 +2,7 @@ import json
 from models import Darknet
 from train import hyp
 from utils import torch_utils
+from utils.torch_utils import model_info
 from utils.utils import compute_loss, build_targets
 from fastai.vision import *
 
@@ -143,7 +144,7 @@ def loss_func(predicted, boxes, classes):
         for detect_idx in range(max_detections):
             clazz = classes[img_idx, detect_idx]
             if clazz == 0: continue
-            l, t, r, b = boxes[img_idx, detect_idx]
+            l, t, r, b = boxes[img_idx, detect_idx] * 0.5 + 0.5
             w = r - l
             h = b - t
             targets.append([img_idx, float(clazz-1), float(l), float(t), float(w), float(h)])
@@ -160,7 +161,7 @@ learner = Learner(data, model, loss_func=loss_func)
 #%%
 
 # Train the learner for 1 epoch
-learner.fit(1)
+fit_one_cycle(learner, 5, max_lr=3e-2)
 
 #%%
 
