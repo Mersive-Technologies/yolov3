@@ -145,12 +145,8 @@ def loss_func(predicted, boxes, classes):
             targets.append([img_idx, float(clazz-1), float(x), float(y), float(w), float(h)])
     ft = torch.cuda.FloatTensor if predicted[0].is_cuda else torch.Tensor
     targets = ft(targets)
-#     predicted = ft(predicted)
-#     print(f"pred={predicted.shape}")
-    print(f"target={targets.shape}")
-    # targets = build_targets(model, targets)
     loss, _ = compute_loss(predicted, targets, model)
-    return loss
+    return loss[0]
 
 #%%
 
