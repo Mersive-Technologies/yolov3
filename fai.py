@@ -143,8 +143,10 @@ def loss_func(predicted, boxes, classes):
         for detect_idx in range(max_detections):
             clazz = classes[img_idx, detect_idx]
             if clazz == 0: continue
-            x, y, w, h = boxes[img_idx, detect_idx]
-            targets.append([img_idx, float(clazz-1), float(x), float(y), float(w), float(h)])
+            l, t, r, b = boxes[img_idx, detect_idx]
+            w = r - l
+            h = b - t
+            targets.append([img_idx, float(clazz-1), float(l), float(t), float(w), float(h)])
     ft = torch.cuda.FloatTensor if predicted[0].is_cuda else torch.Tensor
     targets = ft(targets)
     loss, _ = compute_loss(predicted, targets, model)
