@@ -175,9 +175,11 @@ class YOLOLayer(nn.Module):
         # p.view(bs, 255, 13, 13) -- > (bs, 3, 13, 13, 85)  # (bs, anchors, grid, grid, classes + xywh)
         p = p.view(bs, self.na, self.no, self.ny, self.nx).permute(0, 1, 3, 4, 2).contiguous()  # prediction
 
-        if self.training:
-            return p
+        return p
 
+        # if self.training:
+        #     return p
+        #
         # elif ONNX_EXPORT:
         #     # Constants CAN NOT BE BROADCAST, ensure correct shape!
         #     m = self.na * self.nx * self.ny
@@ -204,31 +206,31 @@ class YOLOLayer(nn.Module):
             # p_cls = p_cls.permute(2, 1, 0)
             # return torch.cat((xy / ngu, wh, p_conf, p_cls), 2).squeeze().t()
 
-        else:  # inference
-            # s = 1.5  # scale_xy  (pxy = pxy * s - (s - 1) / 2)
-            io = p.clone()  # inference output
-            io[..., 0:2] = torch.sigmoid(io[..., 0:2]) + self.grid_xy  # xy
-            io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
-            # io[..., 2:4] = ((torch.sigmoid(io[..., 2:4]) * 2) ** 3) * self.anchor_wh  # wh power method
-            io[..., :4] *= self.stride
-
-            if 'default' in self.arc:  # seperate obj and cls
-                torch.sigmoid_(io[..., 4:])
-            elif 'BCE' in self.arc:  # unified BCE (80 classes)
-                torch.sigmoid_(io[..., 5:])
-                io[..., 4] = 1
-            elif 'CE' in self.arc:  # unified CE (1 background + 80 classes)
-                io[..., 4:] = F.softmax(io[..., 4:], dim=4)
-                io[..., 4] = 1
-
-            if self.nc == 1:
-                io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
-
-            # compute conf
-            io[..., 5:] *= io[..., 4:5]  # conf = obj_conf * cls_conf
-
-            # reshape from [1, 3, 13, 13, 85] to [1, 507, 84], remove obj_conf
-            return io[..., self.oi].view(bs, -1, self.no - 1), p
+        # else:  # inference
+        #     # s = 1.5  # scale_xy  (pxy = pxy * s - (s - 1) / 2)
+        #     io = p.clone()  # inference output
+        #     io[..., 0:2] = torch.sigmoid(io[..., 0:2]) + self.grid_xy  # xy
+        #     io[..., 2:4] = torch.exp(io[..., 2:4]) * self.anchor_wh  # wh yolo method
+        #     # io[..., 2:4] = ((torch.sigmoid(io[..., 2:4]) * 2) ** 3) * self.anchor_wh  # wh power method
+        #     io[..., :4] *= self.stride
+        #
+        #     if 'default' in self.arc:  # seperate obj and cls
+        #         torch.sigmoid_(io[..., 4:])
+        #     elif 'BCE' in self.arc:  # unified BCE (80 classes)
+        #         torch.sigmoid_(io[..., 5:])
+        #         io[..., 4] = 1
+        #     elif 'CE' in self.arc:  # unified CE (1 background + 80 classes)
+        #         io[..., 4:] = F.softmax(io[..., 4:], dim=4)
+        #         io[..., 4] = 1
+        #
+        #     if self.nc == 1:
+        #         io[..., 5] = 1  # single-class model https://github.com/ultralytics/yolov3/issues/235
+        #
+        #     # compute conf
+        #     io[..., 5:] *= io[..., 4:5]  # conf = obj_conf * cls_conf
+        #
+        #     # reshape from [1, 3, 13, 13, 85] to [1, 507, 84], remove obj_conf
+        #     return io[..., self.oi].view(bs, -1, self.no - 1), p
 
 
 class Darknet(nn.Module):
@@ -272,15 +274,17 @@ class Darknet(nn.Module):
                 output.append(x)
             layer_outputs.append(x if i in self.routs else [])
 
-        if self.training:
-            return output
+        return output
+
+        # if self.training:
+        #     return output
         # elif ONNX_EXPORT:
         #     output = torch.cat(output, 1)  # cat 3 layers 85 x (507, 2028, 8112) to 85 x 10647
         #     nc = self.module_list[self.yolo_layers[0]].nc  # number of classes
         #     return output[5:5 + nc].t(), output[0:4].t()  # ONNX scores, boxes
-        else:
-            io, p = list(zip(*output))  # inference output, training output
-            return torch.cat(io, 1), p
+        # else:
+        #     io, p = list(zip(*output))  # inference output, training output
+        #     return torch.cat(io, 1), p
 
     def fuse(self):
         # Fuse Conv2d + BatchNorm2d layers throughout model

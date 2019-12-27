@@ -9,8 +9,8 @@ person_cat = 15  # in pascal voc
 
 # Define a custom loss function that translate between FastAI and Ultralytics
 def loss_func(model, predicted, boxes, classes):
-    if not model.training:
-        predicted = predicted[1]
+    # if not model.training:
+    #     predicted = predicted[1]
     targets = []
     bs = classes.shape[0]
     max_detections = classes.shape[1]
