@@ -113,7 +113,7 @@ class YoloCategoryList(ObjectCategoryList):
     def analyze_pred(self, pred):
         output = []
         for layer_idx, layer in enumerate(pred):
-            conf_thres, nms_thres = 0.05, 0.5
+            conf_thres, nms_thres = 0.001, 0.5
             grid_dim = layer.shape[2:0:-1]
             YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
             YOLOLayer.na = len(self.anchors[layer_idx])  # num anchors
@@ -127,18 +127,17 @@ class YoloCategoryList(ObjectCategoryList):
         infer_out, train_out = list(zip(*output))
         pred = torch.cat(infer_out, 1), train_out
         pred = non_max_suppression(pred[0], conf_thres, nms_thres, multi_cls=False)
-        bboxes = []
+        assert len(pred) == 1 # can we have more than one?
         labels = []
         for i, det in enumerate(pred):  # detections per image
             if det is not None and len(det):
                 # convert from image space to FastAI (-1, -1, 1, 1)
-                bboxes.append(det[0:5] / YoloCategoryList.img_size * 2 - 1)
-                labels.append(1)
-        if len(bboxes) == 0:
-            bboxes = torch.empty((0, 4))
-            labels = torch.tensor([])
-        else:
-            bboxes = torch.tensor(bboxes)
-            labels = torch.tensor(labels)
+                det /= torch.tensor(YoloCategoryList.img_size * 2 + (1, 1))
+                det *= torch.tensor((2, 2, 2, 2, 1, 1))
+                det -= torch.tensor((1, 1, 1, 1, 0, 0))
+                labels = torch.tensor([1] * det.shape[0])
+                return det[:,0:4], labels
+        bboxes = torch.empty((0, 4))
+        labels = torch.tensor([])
         return bboxes, labels
         # return ImageBBox.create(*YoloCategoryList.img_size, bboxes, labels, classes={1: 'person'})
