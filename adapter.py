@@ -3,7 +3,7 @@ import json
 from fastai.vision import *
 
 from models import create_grids, YOLOLayer, infer_yolo
-from utils.utils import compute_loss
+from utils.utils import compute_loss, non_max_suppression
 
 person_cat = 15  # in pascal voc
 
@@ -111,17 +111,34 @@ def create_split_func(samples):
 # Override classes to do our own analysis of results
 class YoloCategoryList(ObjectCategoryList):
     def analyze_pred(self, pred):
+        output = []
         for layer_idx, layer in enumerate(pred):
+            conf_thres, nms_thres = 0.05, 0.5
             grid_dim = layer.shape[2:0:-1]
             YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
-            YOLOLayer.na = len(self.anchors[layer_idx])
+            YOLOLayer.na = len(self.anchors[layer_idx])  # num anchors
+            YOLOLayer.arc = 'default'  # architecture
+            YOLOLayer.nc = layer.shape[3] - 5  # num categories
+            YOLOLayer.no = YOLOLayer.nc + 5  # num outputs
+            YOLOLayer.oi = [0, 1, 2, 3] + list(range(5, YOLOLayer.no))  # output indices
             create_grids(YOLOLayer, YoloCategoryList.img_size, grid_dim, layer.device, layer.dtype)
-            boxes, yolo = infer_yolo(YOLOLayer, pred, 1)
-            for anchor_idx in range(layer.shape[0]):
-                anchor = layer[anchor_idx]
-                for grid_y in range(anchor.shape[0]):
-                    for grid_x in range(anchor.shape[1]):
-                        out = anchor[grid_y, grid_x]
-                        x, y, w, h, objectness, personness = out
-                        print(out)
-        return pred
+            layer_out = infer_yolo(YOLOLayer, layer, 1)
+            output.append(layer_out)
+        infer_out, train_out = list(zip(*output))
+        pred = torch.cat(infer_out, 1), train_out
+        pred = non_max_suppression(pred[0], conf_thres, nms_thres, multi_cls=False)
+        bboxes = []
+        labels = []
+        for i, det in enumerate(pred):  # detections per image
+            if det is not None and len(det):
+                # convert from image space to FastAI (-1, -1, 1, 1)
+                bboxes.append(det[0:5] / YoloCategoryList.img_size * 2 - 1)
+                labels.append(1)
+        if len(bboxes) == 0:
+            bboxes = torch.empty((0, 4))
+            labels = torch.tensor([])
+        else:
+            bboxes = torch.tensor(bboxes)
+            labels = torch.tensor(labels)
+        return bboxes, labels
+        # return ImageBBox.create(*YoloCategoryList.img_size, bboxes, labels, classes={1: 'person'})
