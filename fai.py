@@ -4,7 +4,7 @@ import json
 from models import Darknet
 from train import hyp
 from utils import torch_utils
-from adapter import loss_func, get_y_func, load_voc, has_person, json_to_paths, create_split_func
+from adapter import loss_func, get_y_func, load_voc, has_person, json_to_paths, create_split_func, YoloCategoryList
 from utils.utils import compute_loss, build_targets
 from fastai.vision import *
 
@@ -32,9 +32,23 @@ samples = positive_samp #+ negative_samp
 
 #%%
 
+#%%
+# Load the model
+img_size = (352, 608)
+device = 'cuda:0'
+arc = 'default'
+cfg = 'cfg/yolov3-tiny-anchors.cfg'
+device = torch_utils.select_device(device, apex=False, batch_size=64)
+model = Darknet(cfg, img_size=img_size, arc=arc).to(device)
+model.arc = 'default'
+model.nc = 1  # num classes
+model.hyp = hyp
+
 # Build the paths and pass them to the FastAI ObjectItemList
 posix_paths = json_to_paths(samples)
-lst = ObjectItemList(posix_paths)
+lst = ObjectItemList(posix_paths, label_cls=YoloCategoryList)
+YoloCategoryList.anchors = [model.module_list[l].anchors for l in model.yolo_layers]
+YoloCategoryList.img_size = img_size
 
 #%%
 
@@ -45,9 +59,9 @@ data = (lst
         .transform(
             get_transforms(),
             tfm_y=True,
-            size=(352, 608),
+            size=img_size,
             resize_method=ResizeMethod.PAD,
-            padding_mode = 'zeros'
+            padding_mode='zeros'
         )
         .databunch(bs=16, collate_fn=bb_pad_collate))
 
@@ -59,33 +73,21 @@ data.show_batch(rows=2, ds_type=DatasetType.Valid, figsize=(8,8))
 
 #%%
 
-# Load the model
-device = 'cuda:0'
-arc = 'default'
-cfg = 'cfg/yolov3-tiny-anchors.cfg'
-device = torch_utils.select_device(device, apex=False, batch_size=64)
-model = Darknet(cfg, arc=arc).to(device)
-model.arc = 'default'
-model.nc = 1  # num classes
-model.hyp = hyp
-device
-
-#%%
-
 # Finally we have everything we need to make a learner
 learner = Learner(data, model, loss_func=partial(loss_func, model))
+learner.show_results()
 
 #%%
 
-lr_find(learner)
+# lr_find(learner)
 
 #%%
 
-learner.recorder.plot()
+# learner.recorder.plot()
 
 #%%
 
-fit_one_cycle(learner, 5, max_lr=0.03)
+fit_one_cycle(learner, 1, max_lr=0.03)
 
 #%%
 

@@ -2,6 +2,7 @@ import json
 
 from fastai.vision import *
 
+from models import create_grids, YOLOLayer, infer_yolo
 from utils.utils import compute_loss
 
 person_cat = 15  # in pascal voc
@@ -105,3 +106,22 @@ def create_split_func(samples):
         if split_func(sample):
             valid.add(make_path(sample))
     return lambda it: it in valid
+
+
+# Override classes to do our own analysis of results
+class YoloCategoryList(ObjectCategoryList):
+    def analyze_pred(self, pred):
+        for layer_idx, layer in enumerate(pred):
+            grid_dim = layer.shape[2:0:-1]
+            YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
+            YOLOLayer.na = len(self.anchors[layer_idx])
+            create_grids(YOLOLayer, YoloCategoryList.img_size, grid_dim, layer.device, layer.dtype)
+            boxes, yolo = infer_yolo(YOLOLayer, pred, 1)
+            for anchor_idx in range(layer.shape[0]):
+                anchor = layer[anchor_idx]
+                for grid_y in range(anchor.shape[0]):
+                    for grid_x in range(anchor.shape[1]):
+                        out = anchor[grid_y, grid_x]
+                        x, y, w, h, objectness, personness = out
+                        print(out)
+        return pred
