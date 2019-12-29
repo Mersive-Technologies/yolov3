@@ -113,7 +113,7 @@ class YoloCategoryList(ObjectCategoryList):
     def analyze_pred(self, pred):
         output = []
         for layer_idx, layer in enumerate(pred):
-            conf_thres, nms_thres = 0.001, 0.5
+            conf_thres, nms_thres = 0.05, 0.5
             grid_dim = layer.shape[2:0:-1]
             YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
             YOLOLayer.na = len(self.anchors[layer_idx])  # num anchors
@@ -126,7 +126,9 @@ class YoloCategoryList(ObjectCategoryList):
             output.append(layer_out)
         infer_out, train_out = list(zip(*output))
         pred = torch.cat(infer_out, 1), train_out
-        pred = non_max_suppression(pred[0], conf_thres, nms_thres, multi_cls=False)
+        pred = pred[0]
+        # pred = pred.view(1, *pred.shape)  # fastai calls grab_idx and gives us one at a time, so add bs=1 for yolo
+        pred = non_max_suppression(pred, conf_thres, nms_thres, multi_cls=False)
         assert len(pred) == 1 # can we have more than one?
         labels = []
         for i, det in enumerate(pred):  # detections per image

@@ -38,11 +38,15 @@ img_size = (352, 608)
 device = 'cuda:0'
 arc = 'default'
 cfg = 'cfg/yolov3-tiny-anchors.cfg'
+# cfg = 'cfg/yolov3-tiny.cfg'
+# weights = 'weights/ultralytics-trained-pascal-voc.pt'
+weights = 'weights/best.pt'
 device = torch_utils.select_device(device, apex=False, batch_size=64)
 model = Darknet(cfg, img_size=img_size, arc=arc).to(device)
 model.arc = 'default'
 model.nc = 1  # num classes
 model.hyp = hyp
+model.load_state_dict(torch.load(weights, map_location=device)['model'])
 
 # Build the paths and pass them to the FastAI ObjectItemList
 posix_paths = json_to_paths(samples)
