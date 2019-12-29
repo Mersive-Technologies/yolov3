@@ -3,7 +3,7 @@ import json
 from fastai.vision import *
 
 from models import create_grids, YOLOLayer, infer_yolo
-from utils.utils import compute_loss, non_max_suppression
+from utils.utils import compute_loss, non_max_suppression, scale_coords
 
 person_cat = 15  # in pascal voc
 
@@ -112,8 +112,8 @@ def create_split_func(samples):
 class YoloCategoryList(ObjectCategoryList):
     def analyze_pred(self, pred):
         output = []
+        conf_thres, nms_thres = 0.4, 0.5
         for layer_idx, layer in enumerate(pred):
-            conf_thres, nms_thres = 0.05, 0.5
             grid_dim = layer.shape[2:0:-1]
             YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
             YOLOLayer.na = len(self.anchors[layer_idx])  # num anchors
@@ -133,10 +133,12 @@ class YoloCategoryList(ObjectCategoryList):
         labels = []
         for i, det in enumerate(pred):  # detections per image
             if det is not None and len(det):
-                # convert from image space to FastAI (-1, -1, 1, 1)
-                det /= torch.tensor(YoloCategoryList.img_size * 2 + (1, 1))
+                sz = YoloCategoryList.img_size
+                det[:, :4] = scale_coords(sz, det[:, :4], sz).round()
+                det /= torch.tensor((sz[1], sz[0], sz[1], sz[0], 1, 1))
                 det *= torch.tensor((2, 2, 2, 2, 1, 1))
                 det -= torch.tensor((1, 1, 1, 1, 0, 0))
+                det = torch.index_select(det, 1, torch.LongTensor((1, 0, 3, 2)))
                 labels = torch.tensor([1] * det.shape[0])
                 return det[:,0:4], labels
         bboxes = torch.empty((0, 4))

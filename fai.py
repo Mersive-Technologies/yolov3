@@ -32,7 +32,6 @@ samples = positive_samp #+ negative_samp
 
 #%%
 
-#%%
 # Load the model
 img_size = (352, 608)
 device = 'cuda:0'
@@ -79,7 +78,7 @@ data.show_batch(rows=2, ds_type=DatasetType.Valid, figsize=(8,8))
 
 # Finally we have everything we need to make a learner
 learner = Learner(data, model, loss_func=partial(loss_func, model))
-learner.show_results()
+learner.show_results(rows=5)
 
 #%%
 
