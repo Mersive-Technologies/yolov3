@@ -111,37 +111,46 @@ def create_split_func(samples):
 # Override classes to do our own analysis of results
 class YoloCategoryList(ObjectCategoryList):
     def analyze_pred(self, pred):
+        pred = YoloCategoryList.yolo2pred(pred)
+        assert len(pred) == 1  # can we have more than one?
+        for i, det in enumerate(pred):  # detections per image
+            if det is not None and len(det):
+                det = YoloCategoryList.bbox2fai(det)
+                labels = torch.tensor([1] * det.shape[0])
+                return det[:, 0:4], labels
+        bboxes = torch.empty((0, 4))
+        labels = torch.tensor([])
+        return bboxes, labels
+
+    @classmethod
+    def bbox2fai(cls, det):
+        sz = cls.img_size
+        det[:, :4] = scale_coords(sz, det[:, :4], sz).round()
+        det /= torch.tensor((sz[1], sz[0], sz[1], sz[0], 1, 1))
+        det *= torch.tensor((2, 2, 2, 2, 1, 1))
+        det -= torch.tensor((1, 1, 1, 1, 0, 0))
+        det = torch.index_select(det, 1, torch.LongTensor((1, 0, 3, 2)))
+        return det
+
+    @classmethod
+    def yolo2pred(cls, pred):
+        bs = 1  # fastai calls grab_idx and gives us one at a time, so add bs=1 for yolo
         output = []
         conf_thres, nms_thres = 0.4, 0.5
         for layer_idx, layer in enumerate(pred):
             grid_dim = layer.shape[2:0:-1]
-            YOLOLayer.anchors = YoloCategoryList.anchors[layer_idx]
-            YOLOLayer.na = len(self.anchors[layer_idx])  # num anchors
+            YOLOLayer.anchors = cls.anchors[layer_idx]
+            YOLOLayer.na = len(cls.anchors[layer_idx])  # num anchors
             YOLOLayer.arc = 'default'  # architecture
             YOLOLayer.nc = layer.shape[3] - 5  # num categories
             YOLOLayer.no = YOLOLayer.nc + 5  # num outputs
             YOLOLayer.oi = [0, 1, 2, 3] + list(range(5, YOLOLayer.no))  # output indices
-            create_grids(YOLOLayer, YoloCategoryList.img_size, grid_dim, layer.device, layer.dtype)
-            layer_out = infer_yolo(YOLOLayer, layer, 1)
+            create_grids(YOLOLayer, cls.img_size, grid_dim, layer.device, layer.dtype)
+            layer_out = infer_yolo(YOLOLayer, layer, bs)
             output.append(layer_out)
         infer_out, train_out = list(zip(*output))
         pred = torch.cat(infer_out, 1), train_out
         pred = pred[0]
-        # pred = pred.view(1, *pred.shape)  # fastai calls grab_idx and gives us one at a time, so add bs=1 for yolo
         pred = non_max_suppression(pred, conf_thres, nms_thres, multi_cls=False)
-        assert len(pred) == 1 # can we have more than one?
-        labels = []
-        for i, det in enumerate(pred):  # detections per image
-            if det is not None and len(det):
-                sz = YoloCategoryList.img_size
-                det[:, :4] = scale_coords(sz, det[:, :4], sz).round()
-                det /= torch.tensor((sz[1], sz[0], sz[1], sz[0], 1, 1))
-                det *= torch.tensor((2, 2, 2, 2, 1, 1))
-                det -= torch.tensor((1, 1, 1, 1, 0, 0))
-                det = torch.index_select(det, 1, torch.LongTensor((1, 0, 3, 2)))
-                labels = torch.tensor([1] * det.shape[0])
-                return det[:,0:4], labels
-        bboxes = torch.empty((0, 4))
-        labels = torch.tensor([])
-        return bboxes, labels
-        # return ImageBBox.create(*YoloCategoryList.img_size, bboxes, labels, classes={1: 'person'})
+        return pred
+
