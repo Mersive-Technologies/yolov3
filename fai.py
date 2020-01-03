@@ -76,6 +76,10 @@ data.show_batch(rows=2, ds_type=DatasetType.Valid, figsize=(8,8))
 # Create custom metric
 class ApAt50(Callback):
 
+    def __init__(self):
+        self.stats = []
+        self.apAt50 = 0
+
     def on_epoch_begin(self, **kwargs):
         self.stats = []
         self.apAt50 = 0
@@ -88,23 +92,26 @@ class ApAt50(Callback):
             target_boxes = last_target[0][batch_idx].cpu()
             target_classes = last_target[1][batch_idx].cpu()
             people_idxs = (torch.LongTensor((1,)) == target_classes).nonzero().view(-1)
-            people_boxes = target_boxes[people_idxs]
-            pred = grab_idx(last_output, batch_idx)
-            pred = YoloCategoryList.yolo2pred(pred)
-            if pred is None:
-                if len(people_idxs):
+            target_boxes = target_boxes[people_idxs]
+            target_classes = target_classes[people_idxs]
+            yolo_out = grab_idx(last_output, batch_idx)
+            pred = YoloCategoryList.yolo2pred(yolo_out)  # list([[x1, y1, x2, y2, conf, cls]])
+            detections = pred[0]
+            if detections is None:  # bs=1, first and only result
+                if len(target_classes):
                     self.stats.append((torch.zeros(0, 1), torch.Tensor(), torch.Tensor(), target_classes))
                 continue
-            correct = torch.zeros(len(pred), niou)
-            detected = set()
-            for pred_idx, det in enumerate(pred):  # detections per image
-                if det is not None and len(det):
-                    pbox = YoloCategoryList.bbox2fai(det)
-                    iou, j = bbox_iou(pbox, people_boxes).max(0)
-                    if iou > iou_thres[0] and pred_idx not in detected:
-                        detected.add(pred_idx)
-                        correct[pred_idx] = iou > iou_thres
-                    self.stats.append((correct, pred[:, 4].cpu(), pred[:, 5].cpu(), target_classes))
+            boxes = YoloCategoryList.bbox2fai(detections)
+            correct = torch.zeros(len(detections), niou)
+            if len(target_classes):
+                for det_idx, det in enumerate(detections):  # detections per image
+                    # Break if all targets already located in image
+                    pbox = boxes[det_idx]
+                    iou, j = bbox_iou(pbox, target_boxes).max(0)
+                    correct[det_idx] = iou > iou_thres
+            conf = detections[:, 4]
+            clazz = detections[:, 5]
+            self.stats.append((correct, conf, clazz, target_classes))
         stats = [np.concatenate(x, 0) for x in list(zip(*self.stats))]  # to numpy
         p, r, ap, f1, ap_class = ap_per_class(*stats)
         self.apAt50 = ap
@@ -116,8 +123,19 @@ class ApAt50(Callback):
 #%%
 
 # Finally we have everything we need to make a learner
-learner = Learner(data, model, loss_func=partial(loss_func, model), metrics=[ApAt50()])
+metrics = [ApAt50()]
+learner = Learner(data, model, loss_func=partial(loss_func, model), metrics=metrics)
 learner.show_results(rows=5)
+
+#%%
+# test custom metrics
+epochs = 1
+callbacks = []
+cb_handler = CallbackHandler(callbacks, metrics)
+pbar = master_bar(range(epochs))
+cb_handler.on_train_begin(epochs, pbar=pbar, metrics=metrics)
+val_loss = validate(learner.model, learner.data.valid_dl, loss_func=learner.loss_func,
+                    cb_handler=cb_handler, pbar=pbar)
 
 #%%
 
@@ -129,7 +147,7 @@ learner.show_results(rows=5)
 
 #%%
 
-fit_one_cycle(learner, 1, max_lr=0.03)
+fit_one_cycle(learner, 1, max_lr=0.0)
 
 #%%
 
