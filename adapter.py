@@ -22,7 +22,9 @@ def loss_func(model, predicted, boxes, classes):
             t, l, b, r = boxes[img_idx, detect_idx] * 0.5 + 0.5
             w = r - l
             h = b - t
-            targets.append([img_idx, float(clazz - 1), float(l), float(t), float(w), float(h)])
+            cx = (l + r) / 2.0
+            cy = (t + b) / 2.0
+            targets.append([img_idx, float(clazz - 1), float(cx), float(cy), float(w), float(h)])
     ft = torch.cuda.FloatTensor if predicted[0].is_cuda else torch.Tensor
     targets = ft(targets)
     loss, _ = compute_loss(predicted, targets, model)
