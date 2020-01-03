@@ -90,8 +90,8 @@ class ApAt50(Callback):
         niou = iou_thres.numel()
         for batch_idx in range(0, bs):
             target_boxes = last_target[0][batch_idx].cpu()
-            target_classes = last_target[1][batch_idx].cpu()
-            people_idxs = (torch.LongTensor((1,)) == target_classes).nonzero().view(-1)
+            target_classes = last_target[1][batch_idx].cpu() - 1.0
+            people_idxs = (torch.LongTensor((0,)) == target_classes).nonzero().view(-1)
             target_boxes = target_boxes[people_idxs]
             target_classes = target_classes[people_idxs]
             yolo_out = grab_idx(last_output, batch_idx)
@@ -114,7 +114,7 @@ class ApAt50(Callback):
             self.stats.append((correct, conf, clazz, target_classes))
         stats = [np.concatenate(x, 0) for x in list(zip(*self.stats))]  # to numpy
         p, r, ap, f1, ap_class = ap_per_class(*stats)
-        self.apAt50 = ap
+        self.apAt50 = ap.item()
 
     def on_epoch_end(self, last_metrics, **kwargs):
         return add_metrics(last_metrics, self.apAt50)
