@@ -3,7 +3,7 @@ import json
 from fastai.vision import *
 
 from models import create_grids, YOLOLayer, infer_yolo
-from utils.utils import compute_loss, non_max_suppression, scale_coords
+from utils.utils import compute_loss, non_max_suppression, scale_coords, ap_per_class, bbox_iou
 
 person_cat = 15  # in pascal voc
 
@@ -19,13 +19,14 @@ def loss_func(model, predicted, boxes, classes):
         for detect_idx in range(max_detections):
             clazz = classes[img_idx, detect_idx]
             if clazz == 0: continue
-            l, t, r, b = boxes[img_idx, detect_idx] * 0.5 + 0.5
+            t, l, b, r = boxes[img_idx, detect_idx] * 0.5 + 0.5
             w = r - l
             h = b - t
             targets.append([img_idx, float(clazz - 1), float(l), float(t), float(w), float(h)])
     ft = torch.cuda.FloatTensor if predicted[0].is_cuda else torch.Tensor
     targets = ft(targets)
     loss, _ = compute_loss(predicted, targets, model)
+    loss *= bs / 64
     return loss[0]
 
 
@@ -154,3 +155,48 @@ class YoloCategoryList(ObjectCategoryList):
         pred = non_max_suppression(pred, conf_thres, nms_thres, multi_cls=False)
         return pred
 
+
+class ApAt50(Callback):
+
+    def __init__(self):
+        self.stats = []
+        self.apAt50 = 0
+
+    def on_epoch_begin(self, **kwargs):
+        self.stats = []
+        self.apAt50 = 0
+
+    def on_batch_end(self, last_output, last_target, **kwargs):
+        bs = last_output[0].shape[0]
+        iou_thres = torch.tensor((0.5,))
+        niou = iou_thres.numel()
+        for batch_idx in range(0, bs):
+            target_boxes = last_target[0][batch_idx].cpu()
+            target_classes = last_target[1][batch_idx].cpu() - 1.0
+            people_idxs = (torch.LongTensor((0,)) == target_classes).nonzero().view(-1)
+            target_boxes = target_boxes[people_idxs]
+            target_classes = target_classes[people_idxs]
+            yolo_out = grab_idx(last_output, batch_idx)
+            pred = YoloCategoryList.yolo2pred(yolo_out)  # list([[x1, y1, x2, y2, conf, cls]])
+            detections = pred[0]
+            if detections is None:  # bs=1, first and only result
+                if len(target_classes):
+                    self.stats.append((torch.zeros(0, 1), torch.Tensor(), torch.Tensor(), target_classes))
+                continue
+            boxes = YoloCategoryList.bbox2fai(detections)
+            correct = torch.zeros(len(detections), niou)
+            if len(target_classes):
+                for det_idx, det in enumerate(detections):  # detections per image
+                    # Break if all targets already located in image
+                    pbox = boxes[det_idx]
+                    iou, j = bbox_iou(pbox, target_boxes).max(0)
+                    correct[det_idx] = iou > iou_thres
+            conf = detections[:, 4]
+            clazz = detections[:, 5]
+            self.stats.append((correct, conf, clazz, target_classes))
+        stats = [np.concatenate(x, 0) for x in list(zip(*self.stats))]  # to numpy
+        p, r, ap, f1, ap_class = ap_per_class(*stats)
+        self.apAt50 = ap.item()
+
+    def on_epoch_end(self, last_metrics, **kwargs):
+        return add_metrics(last_metrics, self.apAt50)
