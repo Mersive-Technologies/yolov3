@@ -53,6 +53,25 @@ def get_y_func(images, path):
     return [boxes, classes]
 
 
+def gcp_label_func(sz, images, path):
+    image = images[path]
+    boxes = []
+    for anno in image['annotations']:
+        val = anno['annotation_value']
+        poly = val['image_bounding_poly_annotation']
+        normed = poly['normalized_bounding_poly']
+        verts = normed['normalized_vertices']
+        box = np.array([
+            int(verts[0]['y'] * sz[1]),
+            int(verts[0]['x'] * sz[0]),
+            int(verts[1]['y'] * sz[1]),
+            int(verts[1]['x'] * sz[0])
+        ])
+        boxes.append(box)
+    classes = ['person'] * len(boxes)
+    return [boxes, classes]
+
+
 def load_voc():
     # Download and untar data
     # https://github.com/cedrickchee/knowledge/blob/master/courses/fast.ai/deep-learning-part-2/2018-edition/lesson-8-object-detection.md
