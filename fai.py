@@ -43,7 +43,9 @@ model = Darknet(cfg, img_size=img_size, arc=arc).to(device)
 model.arc = 'default'
 model.nc = 1  # num classes
 model.hyp = hyp
-model.load_state_dict(torch.load(weights, map_location=device)['model'])
+d = torch.load(weights, map_location=device)
+m = d['model']
+model.load_state_dict(m)
 
 # Build the paths and pass them to the FastAI ObjectItemList
 posix_paths = json_to_paths(samples)
@@ -105,5 +107,13 @@ fit_one_cycle(learner, 1, max_lr=1e-2)
 from utils.torch_utils import model_info
 
 model_info(model)
+learner.model
+learner.layer_groups
+learner.lr_range(slice(1e-6, 1e-4))
+from fastai.callbacks import hooks
+hooks.model_summary(learner)
 
 # %%
+
+model_state = model.module.state_dict() if type(model) is nn.parallel.DistributedDataParallel else model.state_dict()
+torch.save({'model': model_state}, "weights/fastai.pt")
