@@ -5,7 +5,7 @@ from utils.parse_config import *
 from utils.utils import *
 import os
 
-ONNX_EXPORT = bool(os.getenv('ONNX_EXPORT', 'False'))
+ONNX_EXPORT = bool(os.getenv('ONNX_EXPORT', ''))
 
 
 def create_modules(module_defs, img_size, arc):
