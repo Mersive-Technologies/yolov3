@@ -11,7 +11,7 @@ onnx
 onnxruntime
 pytorch2keras
 onnx-tf
-tensorflow==1.14.0
+tensorflow==2.5.1
 fastai
 scipy==1.3.3
 torchsummary
