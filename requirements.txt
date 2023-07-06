@@ -13,7 +13,7 @@ pytorch2keras
 onnx-tf
 tensorflow==1.14.0
 fastai
-scipy==1.3.3
+scipy==1.10.0
 torchsummary
 
 # Nvidia Apex (optional) for mixed precision training --------------------------
